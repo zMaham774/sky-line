@@ -133,6 +133,22 @@ body {
     animation: drift-glow 8s ease-in-out infinite;
 }
 
+/* While the page is actively scrolling, pause every decorative background
+   animation (stars, moon glow drift, clouds, rain, snow, particles). Having
+   dozens of these animate at once WHILE the browser is also recompositing
+   the page every scroll frame is what overloads the GPU on weaker phones
+   and produces torn/striped rendering. Pausing them during the scroll
+   itself (see app.js) removes that overlap entirely; they resume a moment
+   after scrolling stops, so the effect is barely noticeable. */
+.is-scrolling .celestial-body,
+.is-scrolling .star,
+.is-scrolling .cloud-shape,
+.is-scrolling .raindrop,
+.is-scrolling .snowflake,
+.is-scrolling .particle-dot {
+    animation-play-state: paused !important;
+}
+
 /* Stars, shown at night */
 .stars {
     position: absolute;
@@ -180,7 +196,11 @@ body {
     position: absolute;
     background: rgba(255, 255, 255, 0.75);
     border-radius: 100px;
-    filter: blur(1px);
+    /* filter: blur() removed — blurring an element that's also being
+       continuously translated (drift-cloud animation) is one of the more
+       expensive things a mobile GPU can be asked to do repeatedly, and was
+       contributing to the scroll-triggered corruption. The soft edge from
+       border-radius + partial opacity reads as "cloud-like" without it. */
 }
 
 .cloud-shape.dense {

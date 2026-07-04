@@ -567,7 +567,7 @@
     function buildStars() {
         els.stars.innerHTML = '';
         const frag = document.createDocumentFragment();
-        for (let i = 0; i < 80; i++) {
+        for (let i = 0; i < 45; i++) {
             const s = document.createElement('div');
             s.className = 'star';
             const size = Math.random() * 2 + 1;
@@ -777,6 +777,27 @@
             });
         });
     }
+
+    /* ---------------------------------------------------------------------
+       PAUSE BACKGROUND ANIMATIONS DURING SCROLL
+       Dozens of concurrently-animated decorative elements (stars, clouds,
+       rain, snow, particles, the moon's drift) plus the browser having to
+       recomposite the whole page every scroll frame is what was causing
+       torn/corrupted rendering on weaker GPUs. Pausing those animations for
+       the duration of the scroll — and for a short moment after it ends —
+       removes that overlap. Uses a simple debounce so it only re-enables
+       once scrolling has actually stopped.
+    --------------------------------------------------------------------- */
+
+    let scrollPauseTimeout = null;
+    function handleScrollForAnimationPause() {
+        document.body.classList.add('is-scrolling');
+        clearTimeout(scrollPauseTimeout);
+        scrollPauseTimeout = setTimeout(() => {
+            document.body.classList.remove('is-scrolling');
+        }, 200);
+    }
+    window.addEventListener('scroll', handleScrollForAnimationPause, { passive: true });
 
     /* ---------------------------------------------------------------------
        INIT
