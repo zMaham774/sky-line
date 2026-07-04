@@ -1,0 +1,1212 @@
+:root {
+    /* Neutrals */
+    --paper: #F7F5F1;
+    --ink: #1C2321;
+    --ink-soft: rgba(28, 35, 33, 0.68);
+    --ink-faint: rgba(28, 35, 33, 0.4);
+    --card-bg: rgba(255, 255, 255, 0.6);
+    --card-bg-strong: rgba(255, 255, 255, 0.78);
+    --card-border: rgba(28, 35, 33, 0.08);
+    --card-border-strong: rgba(255, 255, 255, 0.5);
+
+    /* Sky palettes — overridden per weather state on <body> */
+    --sky-top: #4A90D9;
+    --sky-mid: #7FB8E8;
+    --sky-bottom: #FFD98E;
+    --accent: #E8833A;
+    --text-on-sky: #1C2321;
+
+    /* Type */
+    --font-display: 'Archivo', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+
+    /* Motion */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: auto;
+    /* Lenis handles smooth scroll */
+}
+
+body {
+    margin: 0;
+    position: relative;
+    font-family: var(--font-body);
+    color: var(--ink);
+    background: var(--paper);
+    overflow-x: hidden;
+    min-height: 100vh;
+    transition: color 0.6s var(--ease-out);
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ==========================================================================
+   SKY SCENE — the living background
+   ========================================================================== */
+
+.sky-scene {
+    /* IMPORTANT: fixed and viewport-sized only (never taller than 100vh).
+     The previous approach stretched this layer to the full document height
+     via JS and force-promoted it with translateZ/will-change. On a page this
+     tall (hero + stats + hourly + daily + instruments) that produced a
+     multi-thousand-pixel GPU layer, which exceeds the max single-tile
+     texture size on a lot of Android GPUs — that's what caused the
+     torn/striped bands and "erased" blank patches. Keeping this layer
+     pinned to the viewport keeps it small and well inside GPU limits, and
+     `position: fixed` gets its own compositor layer for free without
+     needing translateZ/will-change hacks. */
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.sky-gradient {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) 45%, var(--sky-bottom) 100%);
+    transition: background 1.2s var(--ease-out);
+}
+
+
+/* Grain texture removed: an SVG feTurbulence filter blended with
+   mix-blend-mode:overlay across a full-viewport fixed layer is a known
+   trigger for corrupted/striped rendering on several Android Chrome GPU
+   compositors — this was the most likely cause of visible static/noise
+   bands. Not worth the risk for a subtle texture effect. */
+.grain-overlay {
+    display: none;
+}
+
+/* Celestial body: sun or moon, positioned via JS based on time of day */
+.celestial-body {
+    position: absolute;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    top: 12%;
+    left: 70%;
+    transition: opacity 0.8s var(--ease-out), transform 1.2s var(--ease-out), background 0.8s ease, box-shadow 0.8s ease;
+}
+
+.celestial-body.is-sun {
+    background: radial-gradient(circle at 35% 35%, #FFF6DD, #FFD98E 55%, #FFB86B 100%);
+    box-shadow: 0 0 90px 30px rgba(255, 217, 142, 0.55);
+}
+
+.celestial-body.is-moon {
+    background: radial-gradient(circle at 35% 35%, #F3F3FA, #D6D8E8 60%, #A8ACC4 100%);
+    box-shadow: 0 0 60px 18px rgba(214, 216, 232, 0.35);
+}
+
+@keyframes drift-glow {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-14px);
+    }
+}
+
+.celestial-body {
+    animation: drift-glow 8s ease-in-out infinite;
+}
+
+/* Stars, shown at night */
+.stars {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 1s var(--ease-out);
+}
+
+.stars.is-visible {
+    opacity: 1;
+}
+
+.star {
+    position: absolute;
+    background: white;
+    border-radius: 50%;
+    animation: twinkle 3s ease-in-out infinite;
+}
+
+@keyframes twinkle {
+
+    0%,
+    100% {
+        opacity: 0.2;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
+/* Clouds */
+.clouds-layer {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 1s var(--ease-out);
+}
+
+.clouds-layer.is-visible {
+    opacity: 1;
+}
+
+.cloud-shape {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.75);
+    border-radius: 100px;
+    filter: blur(1px);
+}
+
+.cloud-shape.dense {
+    background: rgba(160, 168, 178, 0.6);
+}
+
+@keyframes drift-cloud {
+    from {
+        transform: translateX(-10vw);
+    }
+
+    to {
+        transform: translateX(110vw);
+    }
+}
+
+/* Rain */
+.rain-layer {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+}
+
+.rain-layer.is-visible {
+    opacity: 1;
+}
+
+.raindrop {
+    position: absolute;
+    width: 2px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.55));
+    animation: fall-rain linear infinite;
+}
+
+@keyframes fall-rain {
+    from {
+        transform: translateY(-10vh);
+    }
+
+    to {
+        transform: translateY(110vh);
+    }
+}
+
+/* Snow */
+.snow-layer {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+}
+
+.snow-layer.is-visible {
+    opacity: 1;
+}
+
+.snowflake {
+    position: absolute;
+    background: white;
+    border-radius: 50%;
+    opacity: 0.85;
+    animation: fall-snow linear infinite;
+}
+
+@keyframes fall-snow {
+    from {
+        transform: translateY(-10vh) translateX(0);
+    }
+
+    to {
+        transform: translateY(110vh) translateX(20px);
+    }
+}
+
+/* Lightning */
+.lightning-flash {
+    position: absolute;
+    inset: 0;
+    background: white;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.lightning-flash.flash {
+    animation: strike 0.6s ease-out;
+}
+
+@keyframes strike {
+    0% {
+        opacity: 0;
+    }
+
+    8% {
+        opacity: 0.85;
+    }
+
+    12% {
+        opacity: 0.1;
+    }
+
+    18% {
+        opacity: 0.6;
+    }
+
+    25% {
+        opacity: 0;
+    }
+
+    100% {
+        opacity: 0;
+    }
+}
+
+/* Sunny ambient particles */
+.particles {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 1s ease;
+}
+
+.particles.is-visible {
+    opacity: 1;
+}
+
+.particle-dot {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 50%;
+    animation: float-particle 6s ease-in-out infinite;
+}
+
+@keyframes float-particle {
+
+    0%,
+    100% {
+        transform: translateY(0) translateX(0);
+        opacity: 0.3;
+    }
+
+    50% {
+        transform: translateY(-40px) translateX(15px);
+        opacity: 0.9;
+    }
+}
+
+/* ==========================================================================
+   WEATHER STATE PALETTES
+   ========================================================================== */
+
+body.sky-clear-day {
+    --sky-top: #3E86D6;
+    --sky-mid: #7EB8EA;
+    --sky-bottom: #FFDFA0;
+    --accent: #E8833A;
+    --text-on-sky: #1C2321;
+}
+
+body.sky-clear-night {
+    --sky-top: #050814;
+    --sky-mid: #131B34;
+    --sky-bottom: #2C3B5C;
+    --accent: #9FB2E8;
+    --text-on-sky: #F7F5F1;
+}
+
+body.sky-cloudy-day {
+    --sky-top: #7C8B92;
+    --sky-mid: #A6B2B8;
+    --sky-bottom: #D4DBDD;
+    --accent: #5C7A8A;
+    --text-on-sky: #1C2321;
+}
+
+body.sky-cloudy-night {
+    --sky-top: #10141C;
+    --sky-mid: #2A3140;
+    --sky-bottom: #454F60;
+    --accent: #8B9BB4;
+    --text-on-sky: #F7F5F1;
+}
+
+body.sky-rain {
+    --sky-top: #3A4750;
+    --sky-mid: #5C6B73;
+    --sky-bottom: #8FA3AD;
+    --accent: #4A7A8C;
+    --text-on-sky: #F7F5F1;
+}
+
+body.sky-rain-night {
+    --sky-top: #070B12;
+    --sky-mid: #1B242E;
+    --sky-bottom: #2E3B45;
+    --accent: #6C93A8;
+    --text-on-sky: #F7F5F1;
+}
+
+body.sky-snow {
+    --sky-top: #B8C4D4;
+    --sky-mid: #D6DEE8;
+    --sky-bottom: #F0F3F7;
+    --accent: #5C7A9C;
+    --text-on-sky: #1C2321;
+}
+
+body.sky-storm {
+    --sky-top: #0F0F1C;
+    --sky-mid: #232338;
+    --sky-bottom: #3D3D5C;
+    --accent: #B39CFF;
+    --text-on-sky: #F7F5F1;
+}
+
+body.sky-fog {
+    --sky-top: #A8ACA4;
+    --sky-mid: #C4C8C0;
+    --sky-bottom: #E4E4DC;
+    --accent: #7A8272;
+    --text-on-sky: #1C2321;
+}
+
+/* ==========================================================================
+   LAYOUT & TYPE
+   ========================================================================== */
+
+.max-w-6xl {
+    max-width: 72rem;
+}
+
+/* Header */
+.site-header {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    /* NOTE: intentionally NOT using backdrop-filter here. Combining
+     position:sticky with backdrop-filter triggers severe compositor
+     corruption (torn/striped rendering, duplicated layers) on a number of
+     Android Chrome/WebView builds. A near-opaque solid background gives
+     almost the same visual effect with none of the risk. */
+    background: rgba(247, 245, 241, 0.92);
+    border-bottom: 1px solid rgba(28, 35, 33, 0.06);
+}
+
+
+.brand-mark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--ink);
+    color: var(--paper);
+}
+
+.brand-mark i {
+    width: 18px;
+    height: 18px;
+}
+
+.brand-name {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.05rem;
+    letter-spacing: -0.01em;
+}
+
+.search-form {
+    position: relative;
+    flex: 1;
+    max-width: 420px;
+    display: flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid rgba(28, 35, 33, 0.1);
+    border-radius: 999px;
+    padding: 0 6px 0 14px;
+    height: 44px;
+    transition: box-shadow 0.25s var(--ease-out), border-color 0.25s var(--ease-out), background 0.25s var(--ease-out);
+}
+
+.search-form:focus-within {
+    border-color: var(--ink);
+    box-shadow: 0 0 0 3px rgba(28, 35, 33, 0.08);
+    background: rgba(255, 255, 255, 0.85);
+}
+
+.search-icon {
+    width: 16px;
+    height: 16px;
+    color: var(--ink-faint);
+    flex-shrink: 0;
+}
+
+.search-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    outline: none;
+    padding: 0 8px;
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    color: var(--ink);
+    min-width: 0;
+}
+
+.search-input::placeholder {
+    color: var(--ink-faint);
+}
+
+.locate-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--ink-soft);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+}
+
+.locate-btn:hover {
+    background: rgba(28, 35, 33, 0.08);
+    color: var(--ink);
+}
+
+.locate-btn:active {
+    transform: scale(0.9);
+}
+
+.locate-btn i {
+    width: 16px;
+    height: 16px;
+}
+
+.locate-btn.is-loading i {
+    animation: spin 1s linear infinite;
+}
+
+.unit-toggle {
+    display: flex;
+    background: rgba(28, 35, 33, 0.06);
+    border-radius: 999px;
+    padding: 3px;
+    gap: 2px;
+}
+
+.unit-btn {
+    border: none;
+    background: transparent;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: background 0.25s var(--ease-out), color 0.25s var(--ease-out), transform 0.15s ease;
+}
+
+.unit-btn.is-active {
+    background: var(--ink);
+    color: var(--paper);
+}
+
+.unit-btn:active {
+    transform: scale(0.94);
+}
+
+.clock-chip {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    padding: 6px 12px;
+    background: rgba(28, 35, 33, 0.06);
+    border-radius: 999px;
+    white-space: nowrap;
+    display: none;
+}
+
+@media (min-width: 640px) {
+    .clock-chip {
+        display: block;
+    }
+}
+
+/* ==========================================================================
+   EMPTY / LOADING / ERROR STATES
+   ========================================================================== */
+
+.empty-state,
+.error-state {
+    min-height: 70vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2rem 1.5rem;
+}
+
+.empty-illustration,
+.error-illustration {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--card-bg-strong);
+    border: 1px solid var(--card-border);
+    margin-bottom: 1.75rem;
+    color: var(--accent);
+}
+
+.empty-illustration i,
+.error-illustration i {
+    width: 40px;
+    height: 40px;
+}
+
+.empty-title,
+.error-title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(1.5rem, 4vw, 2.25rem);
+    letter-spacing: -0.02em;
+    max-width: 32rem;
+    margin: 0 0 0.75rem;
+}
+
+.empty-copy,
+.error-copy {
+    color: var(--ink-soft);
+    max-width: 28rem;
+    line-height: 1.6;
+    margin: 0 0 1.75rem;
+}
+
+.empty-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.suggestions-label {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--ink-faint);
+    margin-right: 0.25rem;
+}
+
+.chip {
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+    padding: 0.4rem 0.9rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    color: var(--ink);
+    cursor: pointer;
+    transition: transform 0.15s var(--ease-out), background 0.2s ease, border-color 0.2s ease;
+}
+
+.chip:hover {
+    background: var(--card-bg-strong);
+    border-color: var(--ink-faint);
+    transform: translateY(-2px);
+}
+
+.chip:active {
+    transform: translateY(0) scale(0.97);
+}
+
+.retry-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: none;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 0.7rem 1.4rem;
+    border-radius: 999px;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: transform 0.15s var(--ease-out), box-shadow 0.2s ease;
+}
+
+.retry-btn:hover {
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+}
+
+.retry-btn:active {
+    transform: translateY(0) scale(0.96);
+}
+
+.retry-btn i {
+    width: 16px;
+    height: 16px;
+}
+
+.error-state.shake {
+    animation: error-shake 0.5s var(--ease-out);
+}
+
+@keyframes error-shake {
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    20% {
+        transform: translateX(-10px);
+    }
+
+    40% {
+        transform: translateX(8px);
+    }
+
+    60% {
+        transform: translateX(-6px);
+    }
+
+    80% {
+        transform: translateX(4px);
+    }
+}
+
+/* Skeleton loading */
+.loading-state {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 2.5rem 1.5rem;
+}
+
+.loading-hero {
+    height: 280px;
+    border-radius: 28px;
+    margin-bottom: 1.5rem;
+}
+
+.loading-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+}
+
+@media (min-width: 768px) {
+    .loading-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+.loading-card {
+    height: 110px;
+    border-radius: 20px;
+}
+
+.skeleton-shimmer {
+    background: linear-gradient(100deg, rgba(28, 35, 33, 0.05) 30%, rgba(28, 35, 33, 0.12) 50%, rgba(28, 35, 33, 0.05) 70%);
+    background-size: 200% 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: 150% 0;
+    }
+
+    100% {
+        background-position: -50% 0;
+    }
+}
+
+.hidden {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
+/* Belt-and-braces: explicitly kill the shimmer animation when its container is
+   hidden, so mobile browsers can't leave a stray composited layer painting
+   behind other content (seen as striped/noise artifacts on some Android/Chrome
+   builds when a backdrop-filter ancestor is involved). */
+.hidden .skeleton-shimmer,
+.hidden.skeleton-shimmer {
+    animation: none !important;
+}
+
+/* ==========================================================================
+   DASHBOARD
+   ========================================================================== */
+
+.dashboard {
+    padding-bottom: 3rem;
+}
+
+/* Hero panel */
+.hero-panel {
+    padding: 3rem 0 2.5rem;
+    color: var(--text-on-sky);
+}
+
+.hero-location {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.85;
+    margin-bottom: 1rem;
+}
+
+.hero-location i {
+    width: 14px;
+    height: 14px;
+}
+
+.country-name {
+    opacity: 0.6;
+}
+
+.hero-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 2rem;
+    margin-bottom: 1rem;
+}
+
+.hero-temp-block {
+    display: flex;
+    align-items: flex-start;
+    line-height: 0.85;
+}
+
+.hero-temp {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: clamp(4.5rem, 12vw, 8.5rem);
+    letter-spacing: -0.04em;
+}
+
+.hero-unit {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(1.5rem, 3vw, 2.25rem);
+    margin-top: 0.5rem;
+    opacity: 0.75;
+}
+
+.hero-condition-block {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding-bottom: 0.75rem;
+}
+
+.hero-icon {
+    width: 56px;
+    height: 56px;
+    flex-shrink: 0;
+}
+
+.hero-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.hero-condition {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.25rem;
+    margin: 0;
+}
+
+.hero-feelslike {
+    font-size: 0.9rem;
+    opacity: 0.75;
+    margin: 0.15rem 0 0;
+}
+
+.hero-meta {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    opacity: 0.8;
+    display: flex;
+    gap: 0.5rem;
+    margin: 0;
+}
+
+.hero-meta .dot {
+    opacity: 0.5;
+}
+
+/* Stats strip */
+.stats-strip {
+    padding: 0.5rem 0 2rem;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.9rem;
+}
+
+@media (min-width: 768px) {
+    .stats-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+.stat-card {
+    /* NOTE: no backdrop-filter — with several of these on screen at once,
+     stacked blur layers were overloading the compositor on some Android
+     devices and causing visible tearing/corruption during scroll. The
+     semi-transparent background alone still reads as glass against the sky. */
+    background: var(--card-bg-strong);
+    border: 1px solid var(--card-border-strong);
+    border-radius: 20px;
+    padding: 1.1rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    transition: transform 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out), background 0.25s ease;
+    cursor: default;
+}
+
+.stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.1);
+    background: var(--card-bg-strong);
+}
+
+.stat-icon {
+    width: 20px;
+    height: 20px;
+    color: var(--accent);
+}
+
+.stat-label {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-soft);
+}
+
+.stat-value {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.4rem;
+    color: var(--ink);
+}
+
+/* Section heading */
+.section-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.15rem;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    margin: 0 0 1rem;
+}
+
+.section-heading i {
+    width: 18px;
+    height: 18px;
+    color: var(--accent);
+}
+
+.forecast-section,
+.instruments-section {
+    padding: 1.5rem 0;
+}
+
+/* Hourly scroll */
+.hourly-scroll {
+    display: flex;
+    gap: 0.75rem;
+    overflow-x: auto;
+    padding: 0.25rem 0.25rem 1rem;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+}
+
+.hourly-scroll::-webkit-scrollbar {
+    height: 6px;
+}
+
+.hourly-scroll::-webkit-scrollbar-thumb {
+    background: rgba(28, 35, 33, 0.15);
+    border-radius: 999px;
+}
+
+.hour-card {
+    scroll-snap-align: start;
+    flex: 0 0 auto;
+    width: 84px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 18px;
+    padding: 0.9rem 0.6rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    transition: transform 0.2s var(--ease-out), background 0.2s ease;
+}
+
+.hour-card:hover {
+    transform: translateY(-3px);
+    background: var(--card-bg-strong);
+}
+
+.hour-time {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--ink-soft);
+}
+
+.hour-icon {
+    width: 28px;
+    height: 28px;
+    color: var(--accent);
+}
+
+.hour-temp {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--ink);
+}
+
+/* Daily grid */
+.daily-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+}
+
+@media (min-width: 640px) {
+    .daily-grid {
+        grid-template-columns: repeat(5, 1fr);
+        gap: 0.75rem;
+    }
+}
+
+.day-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 18px;
+    padding: 1rem 1.1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    transition: transform 0.2s var(--ease-out), background 0.2s ease, box-shadow 0.2s ease;
+}
+
+@media (min-width: 640px) {
+    .day-card {
+        flex-direction: column;
+        align-items: flex-start;
+        text-align: left;
+    }
+}
+
+.day-card:hover {
+    transform: translateY(-4px);
+    background: var(--card-bg-strong);
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.08);
+}
+
+.day-name {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-soft);
+}
+
+.day-icon {
+    width: 32px;
+    height: 32px;
+    color: var(--accent);
+    margin: 0.4rem 0;
+}
+
+.day-temps {
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+    font-family: var(--font-display);
+    font-weight: 700;
+}
+
+.day-temp-high {
+    font-size: 1.05rem;
+    color: var(--ink);
+}
+
+.day-temp-low {
+    font-size: 0.9rem;
+    color: var(--ink-faint);
+}
+
+/* Instruments grid */
+.instruments-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+}
+
+@media (min-width: 768px) {
+    .instruments-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (min-width: 1024px) {
+    .instruments-grid {
+        grid-template-columns: repeat(6, 1fr);
+    }
+}
+
+.instrument-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 18px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    transition: transform 0.2s var(--ease-out), background 0.2s ease;
+}
+
+.instrument-card:hover {
+    transform: translateY(-3px);
+    background: var(--card-bg-strong);
+}
+
+.instrument-icon {
+    width: 18px;
+    height: 18px;
+    color: var(--accent);
+}
+
+.instrument-label {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-soft);
+}
+
+.instrument-value {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.15rem;
+    color: var(--ink);
+}
+
+/* Footer */
+.site-footer {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--ink-faint);
+    border-top: 1px solid rgba(28, 35, 33, 0.06);
+}
+
+/* ==========================================================================
+   UTILITIES
+   ========================================================================== */
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Focus visibility for accessibility */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+[tabindex]:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+    border-radius: 6px;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* High contrast helper */
+@media (prefers-contrast: more) {
+    :root {
+        --card-bg: rgba(255, 255, 255, 0.92);
+        --card-border: rgba(28, 35, 33, 0.35);
+    }
+}

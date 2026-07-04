@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skyline — Weather Instrument</title>
+    <meta name="description" content="A living instrument panel for the sky above you.">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+
+    <!-- Tailwind CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+
+    <!-- GSAP -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+    <!-- Motion (Framer Motion's vanilla lib) -->
+    <script src="https://cdn.jsdelivr.net/npm/motion@10.16.2/dist/motion.js"></script>
+
+    <!-- Lenis smooth scroll -->
+    <script src="https://unpkg.com/lenis@1.1.13/dist/lenis.min.js"></script>
+
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body class="sky-clear-day">
+
+    <!-- Ambient sky canvas: this sits behind everything and changes with weather -->
+    <div id="sky-scene" class="sky-scene" aria-hidden="true">
+        <div class="sky-gradient"></div>
+        <div class="celestial-body" id="celestial-body"></div>
+        <div class="stars" id="stars"></div>
+        <div class="clouds-layer" id="clouds-layer"></div>
+        <div class="rain-layer" id="rain-layer"></div>
+        <div class="snow-layer" id="snow-layer"></div>
+        <div class="lightning-flash" id="lightning-flash"></div>
+        <div class="particles" id="particles"></div>
+        <div class="grain-overlay"></div>
+    </div>
+
+    <div class="relative z-10 min-h-screen flex flex-col">
+
+        <!-- ============ HEADER ============ -->
+        <header class="site-header" role="banner">
+            <div class="max-w-6xl mx-auto w-full px-5 sm:px-8 py-5 flex items-center justify-between gap-4">
+
+                <div class="brand flex items-center gap-2.5" data-anim="header-item">
+                    <span class="brand-mark" aria-hidden="true">
+                        <i data-lucide="compass"></i>
+                    </span>
+                    <span class="brand-name">Skyline</span>
+                </div>
+
+                <form id="search-form" class="search-form" role="search" data-anim="header-item">
+                    <label for="city-input" class="sr-only">Search for a city</label>
+                    <i data-lucide="search" class="search-icon" aria-hidden="true"></i>
+                    <input id="city-input" type="text" name="city" placeholder="Search a city…" autocomplete="off"
+                        class="search-input" aria-describedby="search-hint" />
+                    <button type="button" id="locate-btn" class="locate-btn" aria-label="Use my current location"
+                        title="Use my current location">
+                        <i data-lucide="locate-fixed"></i>
+                    </button>
+                    <span id="search-hint" class="sr-only">Press enter to search, or use the location button to detect
+                        your city automatically.</span>
+                </form>
+
+                <div class="flex items-center gap-3" data-anim="header-item">
+                    <div class="unit-toggle" role="group" aria-label="Temperature unit">
+                        <button type="button" id="unit-c" class="unit-btn is-active" aria-pressed="true">°C</button>
+                        <button type="button" id="unit-f" class="unit-btn" aria-pressed="false">°F</button>
+                    </div>
+                    <div class="clock-chip" id="clock-chip">
+                        <span id="clock-time">--:--</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main id="main-content" class="flex-1">
+
+            <!-- ============ EMPTY STATE ============ -->
+            <section id="empty-state" class="empty-state" data-anim="fade-block">
+                <div class="empty-illustration" aria-hidden="true">
+                    <i data-lucide="cloud-sun"></i>
+                </div>
+                <h1 class="empty-title">Where's the sky you're curious about?</h1>
+                <p class="empty-copy">Search any city to see its live conditions, or share your location and we'll read
+                    the sky above you.</p>
+                <div class="empty-suggestions" id="empty-suggestions">
+                    <span class="suggestions-label">Try:</span>
+                    <button type="button" class="chip" data-city="Tokyo">Tokyo</button>
+                    <button type="button" class="chip" data-city="Reykjavik">Reykjavík</button>
+                    <button type="button" class="chip" data-city="Marrakesh">Marrakesh</button>
+                    <button type="button" class="chip" data-city="Wellington">Wellington</button>
+                </div>
+            </section>
+
+            <!-- ============ LOADING STATE ============ -->
+            <section id="loading-state" class="loading-state hidden" aria-live="polite" aria-busy="true">
+                <div class="loading-hero skeleton-shimmer"></div>
+                <div class="loading-grid">
+                    <div class="loading-card skeleton-shimmer"></div>
+                    <div class="loading-card skeleton-shimmer"></div>
+                    <div class="loading-card skeleton-shimmer"></div>
+                    <div class="loading-card skeleton-shimmer"></div>
+                </div>
+            </section>
+
+            <!-- ============ ERROR STATE ============ -->
+            <section id="error-state" class="error-state hidden" role="alert">
+                <div class="error-illustration" aria-hidden="true">
+                    <i data-lucide="cloud-off"></i>
+                </div>
+                <h2 class="error-title" id="error-title">We couldn't read the sky there.</h2>
+                <p class="error-copy" id="error-copy">Check the spelling, or try a nearby larger city.</p>
+                <button type="button" id="retry-btn" class="retry-btn">
+                    <i data-lucide="refresh-cw"></i>
+                    <span>Try again</span>
+                </button>
+            </section>
+
+            <!-- ============ WEATHER DASHBOARD ============ -->
+            <div id="dashboard" class="dashboard hidden">
+
+                <!-- HERO: current conditions -->
+                <section class="hero-panel" aria-label="Current conditions">
+                    <div class="max-w-6xl mx-auto w-full px-5 sm:px-8">
+
+                        <div class="hero-location" data-anim="hero-item">
+                            <i data-lucide="map-pin" class="w-4 h-4"></i>
+                            <span id="city-name">—</span>
+                            <span id="country-name" class="country-name"></span>
+                        </div>
+
+                        <div class="hero-main" data-anim="hero-item">
+                            <div class="hero-temp-block">
+                                <span class="hero-temp" id="hero-temp">--</span>
+                                <span class="hero-unit" id="hero-unit">°C</span>
+                            </div>
+                            <div class="hero-condition-block">
+                                <div class="hero-icon" id="hero-icon" aria-hidden="true"></div>
+                                <div>
+                                    <p class="hero-condition" id="hero-condition">—</p>
+                                    <p class="hero-feelslike">Feels like <span id="hero-feelslike">--°</span></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <p class="hero-meta" id="hero-meta" data-anim="hero-item">
+                            <span id="hero-date">—</span>
+                            <span class="dot">·</span>
+                            <span id="hero-daynight">—</span>
+                        </p>
+                    </div>
+                </section>
+
+                <!-- QUICK STATS STRIP -->
+                <section class="stats-strip" aria-label="Key metrics">
+                    <div class="max-w-6xl mx-auto w-full px-5 sm:px-8">
+                        <div class="stats-grid">
+
+                            <div class="stat-card" data-anim="stat-card">
+                                <i data-lucide="droplets" class="stat-icon"></i>
+                                <span class="stat-label">Humidity</span>
+                                <span class="stat-value" id="stat-humidity">--%</span>
+                            </div>
+
+                            <div class="stat-card" data-anim="stat-card">
+                                <i data-lucide="wind" class="stat-icon"></i>
+                                <span class="stat-label">Wind</span>
+                                <span class="stat-value" id="stat-wind">-- km/h</span>
+                            </div>
+
+                            <div class="stat-card" data-anim="stat-card">
+                                <i data-lucide="gauge" class="stat-icon"></i>
+                                <span class="stat-label">Pressure</span>
+                                <span class="stat-value" id="stat-pressure">-- hPa</span>
+                            </div>
+
+                            <div class="stat-card" data-anim="stat-card">
+                                <i data-lucide="eye" class="stat-icon"></i>
+                                <span class="stat-label">Visibility</span>
+                                <span class="stat-value" id="stat-visibility">-- km</span>
+                            </div>
+
+                        </div>
+                    </div>
+                </section>
+
+                <!-- HOURLY FORECAST -->
+                <section class="forecast-section" aria-label="Hourly forecast">
+                    <div class="max-w-6xl mx-auto w-full px-5 sm:px-8">
+                        <h2 class="section-heading">
+                            <i data-lucide="clock-4"></i>
+                            Next 24 hours
+                        </h2>
+                        <div class="hourly-scroll" id="hourly-scroll" tabindex="0"
+                            aria-label="Scrollable hourly forecast">
+                            <!-- hourly cards injected here -->
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 5-DAY FORECAST -->
+                <section class="forecast-section" aria-label="5-day forecast">
+                    <div class="max-w-6xl mx-auto w-full px-5 sm:px-8">
+                        <h2 class="section-heading">
+                            <i data-lucide="calendar-days"></i>
+                            5-day outlook
+                        </h2>
+                        <div class="daily-grid" id="daily-grid">
+                            <!-- daily cards injected here -->
+                        </div>
+                    </div>
+                </section>
+
+                <!-- INSTRUMENT PANEL: detailed metrics -->
+                <section class="instruments-section" aria-label="Additional atmospheric details">
+                    <div class="max-w-6xl mx-auto w-full px-5 sm:px-8">
+                        <h2 class="section-heading">
+                            <i data-lucide="activity"></i>
+                            Instrument panel
+                        </h2>
+                        <div class="instruments-grid">
+
+                            <div class="instrument-card" data-anim="instrument">
+                                <i data-lucide="sunrise" class="instrument-icon"></i>
+                                <span class="instrument-label">Sunrise</span>
+                                <span class="instrument-value" id="inst-sunrise">--:--</span>
+                            </div>
+
+                            <div class="instrument-card" data-anim="instrument">
+                                <i data-lucide="sunset" class="instrument-icon"></i>
+                                <span class="instrument-label">Sunset</span>
+                                <span class="instrument-value" id="inst-sunset">--:--</span>
+                            </div>
+
+                            <div class="instrument-card" data-anim="instrument">
+                                <i data-lucide="compass" class="instrument-icon"></i>
+                                <span class="instrument-label">Wind direction</span>
+                                <span class="instrument-value" id="inst-winddir">--°</span>
+                            </div>
+
+                            <div class="instrument-card" data-anim="instrument">
+                                <i data-lucide="thermometer" class="instrument-icon"></i>
+                                <span class="instrument-label">Dew point</span>
+                                <span class="instrument-value" id="inst-dewpoint">--°</span>
+                            </div>
+
+                            <div class="instrument-card" data-anim="instrument">
+                                <i data-lucide="cloud" class="instrument-icon"></i>
+                                <span class="instrument-label">Cloud cover</span>
+                                <span class="instrument-value" id="inst-cloudcover">--%</span>
+                            </div>
+
+                            <div class="instrument-card" data-anim="instrument">
+                                <i data-lucide="sun" class="instrument-icon"></i>
+                                <span class="instrument-label">UV index</span>
+                                <span class="instrument-value" id="inst-uv">--</span>
+                            </div>
+
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+
+        <footer class="site-footer">
+            <div
+                class="max-w-6xl mx-auto w-full px-5 sm:px-8 py-6 flex flex-col sm:flex-row items-center justify-between gap-2">
+                <p>Data from Open-Meteo. Refreshed on search.</p>
+                <p class="footer-coords" id="footer-coords"></p>
+            </div>
+        </footer>
+
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
